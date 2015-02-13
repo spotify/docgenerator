@@ -22,9 +22,14 @@
 package com.spotify.docgenerator.test;
 
 import com.google.common.collect.ImmutableList;
+import com.spotify.docgenerator.ExampleArgs;
+import com.spotify.docgenerator.ExampleRequest;
+import com.spotify.docgenerator.ExampleResponse;
 
+import javax.ws.rs.Consumes;
 import javax.ws.rs.DefaultValue;
 import javax.ws.rs.GET;
+import javax.ws.rs.POST;
 import javax.ws.rs.Path;
 import javax.ws.rs.Produces;
 import javax.ws.rs.QueryParam;
@@ -33,21 +38,31 @@ import static javax.ws.rs.core.MediaType.APPLICATION_JSON;
 
 /**
  * Yay, some javadoc that might be helpful
- *
- * @author drewc
  */
 @Path("/jobs")
 public class EndpointLookingThing {
   /**
    * Javadoc for your happy little method
-   *
-   * @param q
-   * @return
    */
   @Path("/get")
   @GET
   @Produces(APPLICATION_JSON)
   public SimpleSerializedThing list(@QueryParam("q") @DefaultValue("") final String q) {
-    return new SimpleSerializedThing("WHEE", ImmutableList.of("DOH"));
+    return new SimpleSerializedThing(SimpleSerializedThing.Status.OK,
+        "WHEE", ImmutableList.of("DOH"));
+  }
+
+  /**
+   * Some more doc example for your pleasure.
+   */
+  @POST
+  @Path("/other/{value}")
+  @ExampleArgs("value=ohHai")
+  @ExampleRequest("{\"some\": [ 1, 2], \"json\": \"here\"}")
+  @ExampleResponse("{\"some\": [ 1, 2], \"json\": \"here\"}")
+  @Produces(APPLICATION_JSON)
+  @Consumes(APPLICATION_JSON)
+  public SimpleSerializedThing foo(SimpleSerializedThing huh) {
+    return null;
   }
 }

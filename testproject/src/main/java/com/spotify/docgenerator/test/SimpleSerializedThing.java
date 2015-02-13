@@ -22,29 +22,44 @@
 package com.spotify.docgenerator.test;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.spotify.docgenerator.DocEnum;
 
 import java.util.List;
 
 /**
  * Some javadoc for you to marvel at.
- *
- * @author drewc
  */
 public class SimpleSerializedThing {
+  /** A Status.  Isn't it pretty? */
+  @DocEnum
+  public enum Status {
+    /** You guessed it.  Everything's rainbows and unicorns */
+    OK,
+    /** Oh no, thing has a sad */
+    ERROR
+  }
   private final String name;
   private final List<String> values;
+  private final Status status;
 
-  public SimpleSerializedThing(@JsonProperty("name") String name,
-                               @JsonProperty("value") List<String> values) {
+  public SimpleSerializedThing(
+      @JsonProperty("status") Status status,
+      @JsonProperty("name") String name,
+      @JsonProperty("value") List<String> values) {
     this.name = name;
     this.values = values;
+    this.status = status;
   }
 
   public String getName() {
     return name;
   }
 
-  public List<String> getValue() {
+  public List<String> getValues() {
     return values;
+  }
+
+  public Status getStatus() {
+    return status;
   }
 }

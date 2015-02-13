@@ -190,7 +190,7 @@
     </plugins>
   </build>
 
-  <reporting>
+<!--  <reporting>
     <plugins>
       <plugin>
         <groupId>org.codehaus.mojo</groupId>
@@ -206,5 +206,5 @@
         </configuration>
       </plugin>
     </plugins>
-  </reporting>
+  </reporting>-->
 </project>

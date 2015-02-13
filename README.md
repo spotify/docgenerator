@@ -6,15 +6,57 @@ methods and Jackson `@JsonProperty` annotated objects, and a few other things.
 
 
 #To Use
-## Maven Configuration
-There are two parts to the documentation generator:
-  1. The annotation processor that scans the code for annotations and drops files based upon what it
-   finds
-  2. The maven report plugin that takes those things, and possibly jar file locations, and generates
-   the report. 
+## Source Code Annotations
 
-First, to add the annotation processor to your code, add the following bit to the `pom.xml` of you
-project.
+If you do nothing, you'll still get some manner of usable
+documentation, however I presume you probably want more than that.
+
+If you add `@DocEnum` annotations to your enums, you can add javadoc
+to the individual values in the enum, as well as to the enum itself,
+rather than the fairly bland thing it does otherwise.
+
+On your Resource methods, you can add `@ArgumentDoc` annotations on
+the arguments to the method which can contain doc on the individual
+parameters to the method.
+
+Then for an example exchange, there are the `@ExampleRequest`,
+`@ExampleResponse` and `@ExampleArgs` annotations that are mostly-self
+exlpanatory
+
+  * You can put `@ExampleRequest("text of request body here")` and it
+    will make an example request item in the document.  If the method
+    is annotated with `@Consumes(APPLICATION_JSON)`, it will reformat
+    the JSON, so you can pack it in the source code if you like.  *
+    Likewise there is an `@ExampleResponse("text of response here")`
+    which acts the same way as `@ExampleRequest`.
+
+  * Then there is `@ExampleArgs("varname=value|other=other_Value...")`.
+    If you have path arguments, when composing the url in the
+    documentation, it will substitute occurrences of `{varname}` with
+    the value from the annotation.
+
+If you use the Example annotations, when you set up the plugin in maven,
+you will/may want to set a few things:
+
+  * `<endpointPrefix>` Allows you to prefix your endpoint urls which
+    can be handy depending on how the thing is actually deployed
+  * `<exampleHostPort>` When composing the url in the examples, this is
+    the hostname:port it will use.  The `:port` part can be omitted.
+  * `<examplesAreSsl>` It will generate examples that use SSL.  Defaults
+    to true.
+
+
+## Maven Configuration
+
+There are two parts to the documentation generator:
+
+  1. The annotation processor that scans the code for annotations and
+     drops files based upon what it finds
+  2. The maven report plugin that takes those things, and possibly jar
+     file locations, and generates the report.
+
+First, to add the annotation processor to your code, add the following
+bit to the `pom.xml` of your project.
 
 ```xml
     <dependency>
@@ -55,7 +97,7 @@ this project originated), it may look something like this:
       <plugin>
         <groupId>com.spotify.docgenerator</groupId>
         <artifactId>docgenerator-maven-plugin</artifactId>
-        <version>0.0.1</version>
+        <version>0.0.2-SNAPSHOT</version>
         <configuration>
           <jsonClassesFiles>
             <jsonClassesFile>${project.build.directory}/../../helios-client/target/classes/JSONClasses</jsonClassesFile>
@@ -88,8 +130,19 @@ mvn package site
  
 After it's done, the docs should be in `target/site/rest.html`.
   
+## Examples
+
+I'm glad you asked.  If you look in `testproject` youll find a pojo and a
+resource class which you can look at to see how these things turn into 
+documentation.  To build it all:
+
+    mvn clean package site
+
+and look in the target `testproject/target/site` directory, and load the file
+named `rest.html`.
+
+
 #TODO
-* The Javadoc processing is pretty pathetic
 * Someone who has visual design skills could provide very useful improvements.
 * maybe: Alternatively to doing the maven report plugin thing, a separate tool could be written that
   processed the output files and produced pretty docs.

@@ -49,6 +49,7 @@
           <jarFiles>
             <jarFile>${project.build.directory}/testproject-${project.version}.jar</jarFile>
           </jarFiles>
+          <exampleHostPort>example.com</exampleHostPort>
         </configuration>
       </plugin>
     </plugins>
