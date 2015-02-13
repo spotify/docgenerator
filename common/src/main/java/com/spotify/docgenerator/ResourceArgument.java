@@ -28,11 +28,14 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 public class ResourceArgument {
   private final String name;
   private final TypeDescriptor type;
+  private final String doc;
 
-  public ResourceArgument(@JsonProperty("name") String name,
-                          @JsonProperty("type") TypeDescriptor type) {
+  public ResourceArgument(@JsonProperty("name") final String name,
+                          @JsonProperty("type") final TypeDescriptor type,
+                          @JsonProperty("doc") final String doc) {
     this.name = name;
     this.type = type;
+    this.doc = doc;
   }
 
   public String getName() {
@@ -43,11 +46,16 @@ public class ResourceArgument {
     return type;
   }
 
+  public String getDoc() {
+    return doc;
+  }
+
   @Override
   public String toString() {
     return Objects.toStringHelper("ResourceArgument")
         .add("name", name)
         .add("type", type)
+        .add("doc", doc)
         .toString();
   }
 }

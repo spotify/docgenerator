@@ -21,6 +21,7 @@
 
 package com.spotify.docgenerator;
 
+import com.google.common.base.Charsets;
 import com.google.common.base.Joiner;
 import com.google.common.base.Splitter;
 import com.google.common.collect.ImmutableMap;
@@ -28,9 +29,9 @@ import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.ObjectReader;
 
@@ -57,11 +58,25 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
-/**
- */
+import com.fasterxml.jackson.databind.ObjectWriter;
+
+import static com.fasterxml.jackson.databind.MapperFeature.SORT_PROPERTIES_ALPHABETICALLY;
+import static com.fasterxml.jackson.databind.SerializationFeature.ORDER_MAP_ENTRIES_BY_KEYS;
+import static com.fasterxml.jackson.databind.SerializationFeature.WRITE_DATES_AS_TIMESTAMPS;
+
 @Mojo(name = "generate")
 public class DocgeneratorMojo extends AbstractMavenReport {
+  private static final ObjectWriter PRETTY_OBJECT_WRITER = new ObjectMapper()
+      .configure(SORT_PROPERTIES_ALPHABETICALLY, true)
+      .configure(ORDER_MAP_ENTRIES_BY_KEYS, true)
+      .configure(WRITE_DATES_AS_TIMESTAMPS, false)
+      .writerWithDefaultPrettyPrinter();
+
+  private static final Pattern PATH_VARIABLE = Pattern.compile("\\{([^\\}]*)\\}");
+
   /**
    * Doxia Site Renderer.
    */
@@ -93,6 +108,18 @@ public class DocgeneratorMojo extends AbstractMavenReport {
   private List<String> jarFiles;
 
   /**
+   * Path prefix to prepend to REST endpoints
+   */
+  @Parameter(property = "endpointPrefix")
+  private String endpointPrefix = "";
+
+  @Parameter(property = "examplesAreSsl")
+  private Boolean examplesAreSsl = true;
+
+  @Parameter(property = "exampleHostPort")
+  private String exampleHostPort;
+
+  /**
    * Location of the file.
    */
   @Parameter(defaultValue = "${project.build.directory}", property = "outputDir", required = true)
@@ -103,19 +130,16 @@ public class DocgeneratorMojo extends AbstractMavenReport {
   private final Log log;
 
   private static final Map<String, String> PLAIN_TYPE_MAP = ImmutableMap.<String, String>builder()
-      .put("java.lang.String", "string")
-      .put("java.lang.Integer", "integer")
-      .put("long", "integer")
-      .put("int", "integer")
-      .put("double", "double")
-      .put("boolean", "boolean")
-      .put("java.util.Date", "date")
-      .build();
+      .put("java.lang.String", "string").put("java.lang.Integer", "integer").put("long", "integer")
+      .put("int", "integer").put("double", "double").put("boolean", "boolean")
+      .put("java.util.Date", "date").build();
   private static final Set<String> SKIP_TYPES = ImmutableSet.<String>builder()
       .addAll(PLAIN_TYPE_MAP.keySet())
       .add("java.util.Map")
       .add("java.util.List")
+      .add("java.lang.Iterable")
       .build();
+  private static final Pattern LINK_PATTERN = Pattern.compile("\\{@link ([^}]*)\\}");
 
   public DocgeneratorMojo() {
     super();
@@ -123,12 +147,12 @@ public class DocgeneratorMojo extends AbstractMavenReport {
   }
 
   @Override
-  public String getDescription(Locale arg0) {
+  public String getDescription(final Locale arg0) {
     return "Lists REST API endpoints and describes the datatypes used";
   }
 
   @Override
-  public String getName(Locale arg0) {
+  public String getName(final Locale arg0) {
     return "REST Endpoints And Transfer Classes";
   }
 
@@ -138,7 +162,7 @@ public class DocgeneratorMojo extends AbstractMavenReport {
   }
 
   @Override
-  protected void executeReport(Locale arg0) throws MavenReportException {
+  protected void executeReport(final Locale arg0) throws MavenReportException {
     if (canGenerateReport()) {
       final Sink sink = getSink();
       log.debug("starting report....................");
@@ -204,7 +228,7 @@ public class DocgeneratorMojo extends AbstractMavenReport {
         if (transferClass.getMembers() != null) {
           sink.paragraph();
           sink.monospaced();
-          sink.text(className + " {");
+          sink.text("{");
           sink.lineBreak();
 
           for (TransferMember member : transferClass.getMembers()) {
@@ -221,6 +245,18 @@ public class DocgeneratorMojo extends AbstractMavenReport {
           sink.paragraph_();
         }
 
+        if (transferClass.getValues() != null) {
+          sink.definitionList();
+          for (TransferEnumValue value : transferClass.getValues()) {
+            sink.definedTerm();
+            sink.text("\"" + value.getName() + "\"");
+            sink.definedTerm_();
+            sink.definition();
+            outputJavadoc(sink, value.getJavadoc());
+            sink.definition_();
+          }
+          sink.definitionList_();
+        }
         sink.definitionList_();
       } else if (!knownClasses.contains(className)) {
         processEnum(sink, className);
@@ -228,7 +264,8 @@ public class DocgeneratorMojo extends AbstractMavenReport {
     }
   }
 
-  private void spiderKnownTypes(TypeDescriptor type, Set<String> referencedClasses) {
+  private void spiderKnownTypes(final TypeDescriptor type,
+      final Set<String> referencedClasses) {
     referencedClasses.add(type.getName());
     if (type.getTypeArguments() == null) {
       return;
@@ -254,8 +291,9 @@ public class DocgeneratorMojo extends AbstractMavenReport {
     return allClasses;
   }
 
-  private void restHeading(final Sink sink, String method, String path) {
-    heading3WithAnchor(sink, endpointAnchor(method, path), method.toUpperCase() + " " + path);
+  private void restHeading(final Sink sink, final String method, final String path) {
+    heading3WithAnchor(sink,
+        endpointAnchor(method, path), method.toUpperCase() + " " + path);
   }
 
   private void documentRestEndpoints(final Sink sink, final ObjectMapper mapper)
@@ -290,8 +328,8 @@ public class DocgeneratorMojo extends AbstractMavenReport {
     sink.list();
     for (final ResourceMethod method : allMethods) {
       sink.listItem();
-      sink.link("#" + endpointAnchor(method.getMethod(), method.getPath()));
-      sink.text(method.getMethod().toUpperCase() + " " + method.getPath());
+      sink.link("#" + endpointAnchor(method.getMethod(), endpointPrefix + method.getPath()));
+      sink.text(method.getMethod().toUpperCase() + " " + endpointPrefix + method.getPath());
       sink.link_();
       sink.listItem_();
     }
@@ -302,25 +340,38 @@ public class DocgeneratorMojo extends AbstractMavenReport {
     }
   }
 
-  private void handleRestEndpoint(Sink sink, ResourceMethod method) {
-    restHeading(sink, method.getMethod(), method.getPath());
+  private void handleRestEndpoint(final Sink sink, final ResourceMethod method) {
+    restHeading(sink, method.getMethod(), endpointPrefix + method.getPath());
     outputJavadoc(sink, method.getJavadoc());
-    List<ResourceArgument> args = method.getArguments();
-    if (args != null && !args.isEmpty()) {
-      heading4(sink, "Arguments");
 
-      sink.list();
-      for (ResourceArgument arg : args) {
-        sink.listItem();
-        boldText(sink, arg.getName());
-        sink.text(" ");
-        showType(sink, arg.getType());
-        sink.listItem_();
-      }
-      sink.list_();
+    if (method.getConsumesContentType() != null) {
+      sink.paragraph();
+      boldText(sink, "Request Content-Type: ");
+      sink.text(method.getConsumesContentType());
+      sink.paragraph_();
     }
 
-    heading4(sink, "Returns");
+    final List<ResourceArgument> args = method.getArguments();
+    if (args != null && !args.isEmpty()) {
+      boldText(sink, "Arguments:");
+
+      sink.definitionList();
+      for (final ResourceArgument arg : args) {
+        sink.definedTerm();
+        sink.text(arg.getName());
+        sink.text(" type ");
+        showType(sink, arg.getType());
+        sink.definedTerm_();
+        if (arg.getDoc() != null) {
+          sink.definition();
+          sink.text(arg.getDoc());
+          sink.definition_();
+        }
+      }
+      sink.definitionList_();
+    }
+
+    boldText(sink, "Returns:");
 
     sink.list();
     if (method.getReturnContentType() != null) {
@@ -339,21 +390,108 @@ public class DocgeneratorMojo extends AbstractMavenReport {
 
     sink.list_();
 
+    if (method.getExampleResponse() != null || method.getExampleArgs() != null) {
+      documentExampleRequestResponse(sink, method);
+    }
   }
 
-  private void boldText(Sink sink, final String term) {
+  private void documentExampleRequestResponse(final Sink sink, final ResourceMethod method) {
+    sink.paragraph();
+    boldText(sink, "Example Request:");
+    sink.rawText("<pre>");
+    sink.rawText("curl \\\n");
+    if (!"GET".equals(method.getMethod()) && !"POST".equals(method.getMethod())) {
+      sink.rawText("    -X" + method.getMethod() + " \\\n");
+    }
+
+    if (examplesAreSsl) {
+      sink.rawText("    -E certinfo --cacert cacerts_file \\\n");
+    }
+    if (method.getConsumesContentType() != null) {
+      sink.rawText("    -H \"" + method.getConsumesContentType() + "\" \\\n");
+    }
+    if (!"GET".equals(method.getMethod()) && method.getExampleRequest() != null) {
+      sink.rawText("    -d'");
+
+      if ("application/json".equals(method.getConsumesContentType())) {
+        sink.rawText(normalizeJson(method.getExampleRequest()) + "\n");
+      } else {
+        sink.rawText(method.getExampleRequest());
+      }
+
+      sink.rawText("' \\\n");
+    }
+    sink.rawText("    http"
+        + (examplesAreSsl ? "s" : "")
+        + "://"
+        + exampleHostPort
+        + endpointPrefix + makeExamplePath(method)
+        //+ "method.getExampleSuffix()"
+        );
+    sink.rawText("</pre>");
+
+    sink.paragraph_();
+
+    if (method.getExampleResponse() != null) {
+      final String prettified;
+      if ("application/json".equals(method.getReturnContentType())) {
+        prettified = normalizeJson(method.getExampleResponse());
+      } else {
+        prettified = method.getExampleResponse();
+      }
+      sink.paragraph();
+      boldText(sink, "Example Response:");
+      sink.rawText("<pre>");
+      sink.rawText(prettified);
+      sink.rawText("</pre>");
+      sink.paragraph_();
+    }
+
+  }
+
+  private String makeExamplePath(final ResourceMethod method) {
+    final Matcher matcher = PATH_VARIABLE.matcher(method.getPath());
+    final StringBuffer out = new StringBuffer();
+
+    while (matcher.find()) {
+      final String argName = matcher.group(1);
+      final String argValue = method.getExampleArgs().get(argName);
+      if (argValue == null) {
+        throw new RuntimeException("Cannot find argument with name " + argName + " in "
+            + "example arguments that have "
+            + Joiner.on(",").join(method.getExampleArgs().keySet())
+            + " on " + method.getMethod() + " " + method.getPath());
+      }
+      matcher.appendReplacement(out, argValue);
+    }
+    matcher.appendTail(out);
+    return out.toString();
+  }
+
+  private String normalizeJson(final String json) {
+    try {
+      final JsonNode obj = new ObjectMapper().readTree(json);
+      return PRETTY_OBJECT_WRITER.writeValueAsString(obj);
+    } catch (IOException e) {
+      throw new RuntimeException("Error normalizing JSON\n" + json, e);
+    }
+  }
+
+  private void boldText(final Sink sink, final String term) {
     sink.bold();
     sink.text(term);
     sink.bold_();
   }
 
-  private void classHeading(final Sink sink, String className) {
+  private void classHeading(final Sink sink, final String className) {
     heading3WithAnchor(sink, typeAnchor(className), "Type: " + className);
   }
 
-  private void processEnum(Sink sink, String className) {
-    Class<?> clazz = getClassForNameIsh(sink, className);
+  private void processEnum(final Sink sink, final String className) {
+    log.debug("getting class for enum " + className);
+    final Class<?> clazz = getClassForNameIsh(sink, className);
     if (clazz == null) {
+      log.debug("unable to get class for enum " + className);
       sink.text("Was not able to find class: " + className);
       sink.lineBreak();
       return;
@@ -377,7 +515,7 @@ public class DocgeneratorMojo extends AbstractMavenReport {
 
   }
 
-  private Class<?> getClassForNameIsh(Sink sink, String className) {
+  private Class<?> getClassForNameIsh(final Sink sink, final String className) {
     try {
       return getClassForName(className);
     } catch (ClassNotFoundException e) {
@@ -407,7 +545,7 @@ public class DocgeneratorMojo extends AbstractMavenReport {
     }
   }
 
-  private void showType(Sink sink, TypeDescriptor type) {
+  private void showType(final Sink sink, final TypeDescriptor type) {
     if (PLAIN_TYPE_MAP.containsKey(type.getName())) {
       sink.text(PLAIN_TYPE_MAP.get(type.getName()));
       return;
@@ -427,7 +565,7 @@ public class DocgeneratorMojo extends AbstractMavenReport {
       return;
     }
 
-    if ("java.util.List".equals(type.getName())) {
+    if ("java.util.List".equals(type.getName()) || "java.lang.Iterable".equals(type.getName())) {
       sink.text("[");
       showType(sink, type.getTypeArguments().get(0));
       sink.text(", ]");
@@ -441,30 +579,30 @@ public class DocgeneratorMojo extends AbstractMavenReport {
     sink.text("<??" + type.getName() + "??>");
   }
 
-  private void typeLink(Sink sink, TypeDescriptor type) {
+  private void typeLink(final Sink sink, final TypeDescriptor type) {
     sink.link("#" + typeAnchor(type.getName()));
     sink.text(type.getName());
     sink.link_();
   }
 
-  private List<ResourceMethod> readResourceMethods(ObjectMapper mapper, FileInputStream ist)
+  private List<ResourceMethod> readResourceMethods(final ObjectMapper mapper,
+      final FileInputStream ist)
       throws JsonProcessingException, IOException {
-    final ObjectReader reader = mapper.reader(new TypeReference<List<ResourceMethod>>(){});
+    final ObjectReader reader = mapper.reader(new TypeReference<List<ResourceMethod>>() {});
     return reader.readValue(ist);
   }
 
   private Map<String, TransferClass> readTransferClasses(final ObjectMapper mapper,
-      FileInputStream ist) throws IOException, JsonProcessingException {
-    final ObjectReader reader = mapper.reader(new TypeReference<Map<String, TransferClass>>(){});
+      final FileInputStream ist) throws IOException, JsonProcessingException {
+    final ObjectReader reader = mapper.reader(new TypeReference<Map<String, TransferClass>>() {});
     return reader.readValue(ist);
   }
 
-  private String endpointAnchor(String method, String path) {
-    return method + "-" + path.replace("/", "-").replace("{", "-")
-        .replace("}", "-");
+  private String endpointAnchor(final String method, final String path) {
+    return method + "-" + path.replace("/", "-").replace("{", "-").replace("}", "-");
   }
 
-  private String typeAnchor(String name) {
+  private String typeAnchor(final String name) {
     return name.replace(".", "-");
   }
 
@@ -478,15 +616,37 @@ public class DocgeneratorMojo extends AbstractMavenReport {
     sink.paragraph_();
   }
 
-  private void processJavadoc(Sink sink, final String javadoc) {
+  private void processJavadoc(final Sink sink, final String javadoc) {
 
     if (javadoc == null) {
       return;
     }
 
-    // TODO(drewc) split javadoc on lines and put in <p></p> bits for blank (or whitespace only)
-    // lines.
-    sink.rawText(javadoc);
+    final String linked = linkifyJavadoc(javadoc);
+    final String paragraphed = paragraphifyJavadoc(linked);
+
+
+    sink.rawText(paragraphed);
+  }
+
+  private String paragraphifyJavadoc(final String javadoc) {
+    return javadoc.replaceAll("(?m)^\\s*$", "</p>\n<p>");
+  }
+
+  private String linkifyJavadoc(final String javadoc) {
+    final Matcher matcher = LINK_PATTERN.matcher(javadoc);
+    final StringBuffer out = new StringBuffer();
+
+    while (matcher.find()) {
+      String group = matcher.group(1);
+      if (group.startsWith("#")) {
+        group = group.substring(1);
+      }
+
+      matcher.appendReplacement(out, "<code>" + group + "</code>");
+    }
+    matcher.appendTail(out);
+    return out.toString();
   }
 
   private void heading1(final Sink sink, final String heading) {
@@ -508,7 +668,8 @@ public class DocgeneratorMojo extends AbstractMavenReport {
   private void heading3WithAnchor(final Sink sink, final String anchor, final String text) {
     sink.section3();
     sink.sectionTitle3();
-    sink.anchor(anchor); sink.anchor_();
+    sink.anchor(anchor);
+    sink.anchor_();
     sink.text(text);
     sink.sectionTitle3_();
     sink.section3_();
@@ -537,20 +698,23 @@ public class DocgeneratorMojo extends AbstractMavenReport {
     return siteRenderer;
   }
 
-  private Class<?> getClassForName(final String name)
-      throws ClassNotFoundException, MalformedURLException {
+  private Class<?> getClassForName(final String name) throws ClassNotFoundException,
+      MalformedURLException {
     final URLClassLoader loader = getPluginClassLoader();
     return loader.loadClass(name);
   }
 
   private URLClassLoader getPluginClassLoader() throws MalformedURLException {
+    log.debug("Plugin Classloader = " + pluginClassLoader);
     if (pluginClassLoader != null) {
       return pluginClassLoader;
     }
 
     final List<URL> jarUrls = Lists.newArrayList();
+    log.warn("Number of Jarfiles to add to classpath : " + jarFiles.size());
     for (final String jarName : jarFiles) {
       jarUrls.add(new URL("file://" + jarName));
+      log.warn("Adding " + jarName + " to resolution path");
     }
     final URLClassLoader loader = new URLClassLoader(jarUrls.toArray(new URL[jarUrls.size()]));
     pluginClassLoader = loader;

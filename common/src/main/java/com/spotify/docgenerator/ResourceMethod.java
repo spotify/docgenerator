@@ -22,10 +22,10 @@
 package com.spotify.docgenerator;
 
 import com.google.common.base.Objects;
-
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import java.util.List;
+import java.util.Map;
 
 public class ResourceMethod {
   private final String name;
@@ -35,21 +35,45 @@ public class ResourceMethod {
   private final TypeDescriptor returnType;
   private final List<ResourceArgument> arguments;
   private final String javadoc;
+  private final String consumesContentType;
+  private final String exampleResponse;
+  private final String exampleRequest;
+  private final Map<String, String> exampleArgs;
 
   public ResourceMethod(@JsonProperty("name") String name,
                          @JsonProperty("method") String method,
                          @JsonProperty("path") String path,
                          @JsonProperty("returnContentType") String returnContentType,
+                         @JsonProperty("consumesContentType") String consumesContentType,
                          @JsonProperty("returnType") TypeDescriptor returnType,
                          @JsonProperty("resourceArgument") List<ResourceArgument> arguments,
-                         @JsonProperty("javadoc") String javadoc) {
+                         @JsonProperty("javadoc") String javadoc,
+                         @JsonProperty("exampleResponse") String exampleResponse,
+                         @JsonProperty("exampleRequest") String exampleRequest,
+                         @JsonProperty("exampleArgs") Map<String, String> exampleArgs) {
     this.name = name;
     this.method = method;
     this.path = path;
     this.returnContentType = returnContentType;
+    this.consumesContentType = consumesContentType;
     this.returnType = returnType;
     this.arguments = arguments;
     this.javadoc = javadoc;
+    this.exampleResponse = exampleResponse;
+    this.exampleRequest = exampleRequest;
+    this.exampleArgs = exampleArgs;
+  }
+
+  public Map<String, String> getExampleArgs() {
+    return exampleArgs;
+  }
+
+  public String getExampleRequest() {
+    return exampleRequest;
+  }
+
+  public String getExampleResponse() {
+    return exampleResponse;
   }
 
   public String getName() {
@@ -66,6 +90,10 @@ public class ResourceMethod {
 
   public String getReturnContentType() {
     return returnContentType;
+  }
+
+  public String getConsumesContentType() {
+    return consumesContentType;
   }
 
   public TypeDescriptor getReturnType() {

@@ -23,10 +23,11 @@ package com.spotify.docgenerator;
 
 import com.google.auto.service.AutoService;
 import com.google.common.base.Joiner;
+import com.google.common.base.Splitter;
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -59,9 +60,11 @@ import javax.lang.model.type.TypeMirror;
 import javax.tools.Diagnostic.Kind;
 import javax.tools.FileObject;
 import javax.tools.StandardLocation;
+import javax.ws.rs.Consumes;
 import javax.ws.rs.Path;
 import javax.ws.rs.PathParam;
 import javax.ws.rs.Produces;
+import javax.ws.rs.core.Context;
 
 import static com.fasterxml.jackson.databind.MapperFeature.SORT_PROPERTIES_ALPHABETICALLY;
 import static com.fasterxml.jackson.databind.SerializationFeature.ORDER_MAP_ENTRIES_BY_KEYS;
@@ -74,7 +77,8 @@ import static com.fasterxml.jackson.databind.SerializationFeature.WRITE_DATES_AS
     "javax.ws.rs.POST",
     "javax.ws.rs.PUT",
     "javax.ws.rs.DELETE",
-    "com.spotify.helios.master.http.PATCH"
+    "com.spotify.helios.master.http.PATCH",
+    "com.spotify.docgenerator.DocEnum"
     })
 @SupportedSourceVersion(SourceVersion.RELEASE_7)
 @SupportedOptions({ "debug", "verify" })
@@ -96,10 +100,12 @@ public class JacksonJerseyAnnotationProcessor extends AbstractProcessor {
 
   private final Map<String, TransferClass> jsonClasses = Maps.newHashMap();
   private final Map<String, ResourceClass> resourceClasses = Maps.newHashMap();
+
   private final List<String> debugMessages = Lists.newArrayList();
 
   @Override
-  public boolean process(Set<? extends TypeElement> annotations, RoundEnvironment roundEnv) {
+  public boolean process(final Set<? extends TypeElement> annotations,
+      final RoundEnvironment roundEnv) {
     if (roundEnv.processingOver()) {
       generateOutput();
     } else {
@@ -108,16 +114,16 @@ public class JacksonJerseyAnnotationProcessor extends AbstractProcessor {
     return true;
   }
 
-  private void processAnnotations(Set<? extends TypeElement> annotations,
-                                  RoundEnvironment roundEnv) {
+  private void processAnnotations(final Set<? extends TypeElement> annotations,
+                                  final RoundEnvironment roundEnv) {
     processJacksonAnnotations(roundEnv);
     processRESTEndpointAnnotations(annotations, roundEnv);
   }
 
   private void processRESTEndpointAnnotations(final Set<? extends TypeElement> annotations,
                                               final RoundEnvironment roundEnv) {
-    for (String methodAnnotation : METHOD_ANNOTATIONS) {
-      for (TypeElement foundAnnotations : annotations) {
+    for (final String methodAnnotation : METHOD_ANNOTATIONS) {
+      for (final TypeElement foundAnnotations : annotations) {
         if (foundAnnotations.toString().equals(methodAnnotation)) {
           processFoundRestAnnotations(foundAnnotations, roundEnv);
         }
@@ -149,7 +155,12 @@ public class JacksonJerseyAnnotationProcessor extends AbstractProcessor {
    */
   private List<ResourceArgument> computeMethodArguments(final ExecutableElement ee) {
     final List<ResourceArgument> arguments = Lists.newArrayList();
-    for (VariableElement ve : ee.getParameters()) {
+    for (final VariableElement ve : ee.getParameters()) {
+      // don't include context params in rest call stuff
+      final Context contextAnnotation = ve.getAnnotation(Context.class);
+      if (contextAnnotation != null) {
+        continue;
+      }
       final PathParam pathAnnotation = ve.getAnnotation(PathParam.class);
       final String argName;
       if (pathAnnotation != null) {
@@ -157,7 +168,14 @@ public class JacksonJerseyAnnotationProcessor extends AbstractProcessor {
       } else {
         argName = ve.getSimpleName().toString();
       }
-      arguments.add(new ResourceArgument(argName, makeTypeDescriptor(ve.asType())));
+      final ArgumentDoc argDoc = ve.getAnnotation(ArgumentDoc.class);
+      final String docString;
+      if (argDoc != null) {
+        docString = argDoc.value();
+      } else {
+        docString = null;
+      }
+      arguments.add(new ResourceArgument(argName, makeTypeDescriptor(ve.asType()), docString));
     }
     return arguments;
   }
@@ -170,14 +188,40 @@ public class JacksonJerseyAnnotationProcessor extends AbstractProcessor {
     final String javaDoc = processingEnv.getElementUtils().getDocComment(ee);
     final Path pathAnnotation = ee.getAnnotation(Path.class);
     final Produces producesAnnotation = ee.getAnnotation(Produces.class);
+    final Consumes consumesAnnotation = ee.getAnnotation(Consumes.class);
+    final ExampleResponse exampleResponse = ee.getAnnotation(ExampleResponse.class);
+    final ExampleRequest exampleRequest = ee.getAnnotation(ExampleRequest.class);
+    final ExampleArgs exampleArgs = ee.getAnnotation(ExampleArgs.class);
+    final Map<String, String> parsedArgs = parseArgs(exampleArgs);
+
     return new ResourceMethod(
         ee.getSimpleName().toString(),
         computeRequestMethod(ee),
         (pathAnnotation == null) ? null : pathAnnotation.value(),
         (producesAnnotation == null) ? null : Joiner.on(",").join(producesAnnotation.value()),
+        (consumesAnnotation == null) ? null : Joiner.on(",").join(consumesAnnotation.value()),
         makeTypeDescriptor(ee.getReturnType()),
         arguments,
-        javaDoc);
+        javaDoc,
+        (exampleResponse == null) ? null : exampleResponse.value(),
+        (exampleRequest == null) ? null : exampleRequest.value(),
+        parsedArgs);
+  }
+
+  private Map<String, String> parseArgs(final ExampleArgs exampleArgs) {
+    if (exampleArgs == null) {
+      return null;
+    }
+    final ImmutableMap.Builder<String, String> result = ImmutableMap.builder();
+    final List<String> items = Splitter.on("|").splitToList(exampleArgs.value());
+    for (final String item : items) {
+      final List<String> bits = Splitter.on("=").limit(2).splitToList(item);
+      if (bits.size() != 2) {
+        throw new RuntimeException("item in " + exampleArgs.value() + " missing = sign?");
+      }
+      result.put(bits.get(0), bits.get(1));
+    }
+    return result.build();
   }
 
   /**
@@ -225,7 +269,40 @@ public class JacksonJerseyAnnotationProcessor extends AbstractProcessor {
   private void processJacksonAnnotations(final RoundEnvironment roundEnv) {
     processJsonPropertyAnnotations(roundEnv);
     processJsonSerializeAnnotations(roundEnv);
+    processDocEnumAnnotations(roundEnv);
   }
+
+  private void processDocEnumAnnotations(final RoundEnvironment roundEnv) {
+    final Set<? extends Element> elements = roundEnv.getElementsAnnotatedWith(DocEnum.class);
+    for (final Element e : elements) {
+      if (e.getKind() != ElementKind.ENUM) {
+        System.err.println("[WARN] Kind for " + e.getSimpleName()
+            + " is not ENUM like we expected");
+        continue;
+      }
+      final TypeElement enumElement = (TypeElement) e;
+      final TransferClass klass = getOrCreateTransferClass(
+          enumElement.getQualifiedName().toString(),
+          processingEnv.getElementUtils().getDocComment(enumElement));
+      final List<? extends Element> enclosed = e.getEnclosedElements();
+      for (final Element inner : enclosed) {
+        if (inner.getKind() == ElementKind.ENUM_CONSTANT) {
+          klass.getValues().add(new TransferEnumValue(inner.getSimpleName().toString(),
+              processingEnv.getElementUtils().getDocComment(inner)));
+        }
+      }
+    }
+  }
+
+  private String getJavaDoc(final TypeElement clazz) {
+    final String clazzDoc = processingEnv.getElementUtils().getDocComment(clazz);
+    if (clazzDoc != null) {
+      return clazzDoc;
+    }
+
+    return null;
+  }
+
 
   /**
    * Go through a Jackson-annotated constructor, and produce {@link TransferClass}es representing
@@ -245,10 +322,8 @@ public class JacksonJerseyAnnotationProcessor extends AbstractProcessor {
         continue;
       }
       final TypeElement parent = (TypeElement) parentElement;
-      final String parentJavaDoc = processingEnv.getElementUtils().getDocComment(parent);
-      final String parentName = parent.getQualifiedName().toString();
-
-      final TransferClass klass = getOrCreateTransferClass(parentName, parentJavaDoc);
+      final TransferClass klass = getOrCreateTransferClass(
+          parent.getQualifiedName().toString(), getJavaDoc(parent));
 
       klass.add(e.toString(), makeTypeDescriptor(e.asType()));
     }
@@ -278,16 +353,23 @@ public class JacksonJerseyAnnotationProcessor extends AbstractProcessor {
   }
 
   private TransferClass getOrCreateTransferClass(final String parentName,
-                                                 final String parentJavaDoc) {
+      final String parentJavaDoc) {
+    return getOrCreateTransferClass(parentName, parentJavaDoc, (String) null);
+  }
+
+  private TransferClass getOrCreateTransferClass(final String parentName,
+                                                 final String parentJavaDoc,
+                                                 final String logInfo) {
     final TransferClass klass = jsonClasses.get(parentName);
     if (klass != null) {
       return klass;
     }
-    final TransferClass newKlass = new TransferClass(
-        Lists.<TransferMember>newArrayList(), parentJavaDoc);
+    final TransferClass newKlass = new TransferClass(Lists.<TransferEnumValue>newArrayList(),
+        Lists.<TransferMember>newArrayList(), parentJavaDoc, logInfo);
     jsonClasses.put(parentName, newKlass);
     return newKlass;
   }
+
 
   /**
    * Make a {@link TypeDescriptor} by examining the {@link TypeMirror} and recursively looking
@@ -327,8 +409,11 @@ public class JacksonJerseyAnnotationProcessor extends AbstractProcessor {
       for (final ResourceMethod method : klass.getMembers()) {
         resources.add(new ResourceMethod("", method.getMethod(),
             computeDisplayPath(path, method.getPath()),
-            method.getReturnContentType(), method.getReturnType(), method.getArguments(),
-            method.getJavadoc()));
+            method.getReturnContentType(), method.getConsumesContentType(),
+            method.getReturnType(), method.getArguments(),
+            method.getJavadoc(), method.getExampleResponse(),
+            method.getExampleRequest(),
+            method.getExampleArgs()));
       }
     }
     writeJsonToFile(filer, "RESTEndpoints", resources);

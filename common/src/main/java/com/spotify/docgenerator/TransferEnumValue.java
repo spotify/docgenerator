@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014 Spotify AB.
+ * Copyright (c) 2015 Spotify AB.
  *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -23,42 +23,22 @@ package com.spotify.docgenerator;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 
-import java.util.List;
-
-public class TransferClass {
-  private final List<TransferMember> members;
+public class TransferEnumValue {
+  private final String name;
   private final String javadoc;
-  private final List<TransferEnumValue> values;
-  private final String loginfo;
 
-  public TransferClass(
-      @JsonProperty("enumValues") List<TransferEnumValue> enumValues,
-      @JsonProperty("members") List<TransferMember> members,
-      @JsonProperty("javadoc") String javadoc,
-      @JsonProperty("loginfo") String loginfo) {
-    this.members = members;
+  public TransferEnumValue(
+      @JsonProperty("name") final String name,
+      @JsonProperty("javadoc") final String javadoc) {
+    this.name = name;
     this.javadoc = javadoc;
-    this.values = enumValues;
-    this.loginfo = loginfo;
   }
 
-  public List<TransferMember> getMembers() {
-    return members;
+  public String getName() {
+    return name;
   }
 
   public String getJavadoc() {
     return javadoc;
-  }
-
-  public List<TransferEnumValue> getValues() {
-    return values;
-  }
-
-  public String getLoginfo() {
-    return loginfo;
-  }
-
-  public void add(String name, TypeDescriptor type) {
-    members.add(new TransferMember(name, type));
   }
 }
