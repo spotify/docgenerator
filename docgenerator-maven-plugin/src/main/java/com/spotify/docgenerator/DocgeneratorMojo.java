@@ -358,8 +358,9 @@ public class DocgeneratorMojo extends AbstractMavenReport {
       sink.definitionList();
       for (final ResourceArgument arg : args) {
         sink.definedTerm();
+        boldText(sink, arg.getLocation().toString().toLowerCase() + " parameter: ");
         sink.text(arg.getName());
-        sink.text(" type ");
+        boldText(sink, " type: ");
         showType(sink, arg.getType());
         sink.definedTerm_();
         if (arg.getDoc() != null) {
@@ -449,6 +450,7 @@ public class DocgeneratorMojo extends AbstractMavenReport {
 
   }
 
+  //TODO(dcsillag) handle query arguments
   private String makeExamplePath(final ResourceMethod method) {
     final Matcher matcher = PATH_VARIABLE.matcher(method.getPath());
     final StringBuffer out = new StringBuffer();

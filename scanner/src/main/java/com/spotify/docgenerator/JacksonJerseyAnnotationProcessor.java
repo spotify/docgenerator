@@ -28,6 +28,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.spotify.docgenerator.ResourceArgument.Location;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -64,6 +65,7 @@ import javax.ws.rs.Consumes;
 import javax.ws.rs.Path;
 import javax.ws.rs.PathParam;
 import javax.ws.rs.Produces;
+import javax.ws.rs.QueryParam;
 import javax.ws.rs.core.Context;
 
 import static com.fasterxml.jackson.databind.MapperFeature.SORT_PROPERTIES_ALPHABETICALLY;
@@ -175,7 +177,16 @@ public class JacksonJerseyAnnotationProcessor extends AbstractProcessor {
       } else {
         docString = null;
       }
-      arguments.add(new ResourceArgument(argName, makeTypeDescriptor(ve.asType()), docString));
+      final ResourceArgument.Location location;
+      if (pathAnnotation != null) {
+        location = Location.PATH;
+      } else if (ve.getAnnotation(QueryParam.class) != null) {
+        location = Location.QUERY;
+      } else {
+        location = Location.BODY;
+      }
+      arguments.add(new ResourceArgument(argName, makeTypeDescriptor(ve.asType()), docString,
+          location));
     }
     return arguments;
   }

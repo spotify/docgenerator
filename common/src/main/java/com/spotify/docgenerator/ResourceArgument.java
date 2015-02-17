@@ -26,16 +26,22 @@ import com.google.common.base.Objects;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 public class ResourceArgument {
+  public enum Location {
+    PATH, QUERY, BODY
+  }
   private final String name;
   private final TypeDescriptor type;
   private final String doc;
+  private final Location location;
 
   public ResourceArgument(@JsonProperty("name") final String name,
                           @JsonProperty("type") final TypeDescriptor type,
-                          @JsonProperty("doc") final String doc) {
+                          @JsonProperty("doc") final String doc,
+                          @JsonProperty("location") final Location location) {
     this.name = name;
     this.type = type;
     this.doc = doc;
+    this.location = location;
   }
 
   public String getName() {
@@ -50,12 +56,17 @@ public class ResourceArgument {
     return doc;
   }
 
+  public Location getLocation() {
+    return location;
+  }
+
   @Override
   public String toString() {
     return Objects.toStringHelper("ResourceArgument")
         .add("name", name)
         .add("type", type)
         .add("doc", doc)
+        .add("location", location)
         .toString();
   }
 }
