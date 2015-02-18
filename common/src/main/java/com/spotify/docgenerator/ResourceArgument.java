@@ -27,7 +27,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 
 public class ResourceArgument {
   public enum Location {
-    PATH, QUERY, BODY
+    PATH, QUERY, BODY, CONTEXT
   }
   private final String name;
   private final TypeDescriptor type;

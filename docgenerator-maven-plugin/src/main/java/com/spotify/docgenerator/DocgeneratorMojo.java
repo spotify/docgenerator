@@ -63,6 +63,7 @@ import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.spotify.docgenerator.ResourceArgument.Location;
 
 import edu.emory.mathcs.backport.java.util.Collections;
 
@@ -351,12 +352,17 @@ public class DocgeneratorMojo extends AbstractMavenReport {
       sink.paragraph_();
     }
 
+    final Map<String, String> paramDocs = getParamDocs(method.getJavadoc());
+
     final List<ResourceArgument> args = method.getArguments();
     if (args != null && !args.isEmpty()) {
       boldText(sink, "Arguments:");
 
       sink.definitionList();
       for (final ResourceArgument arg : args) {
+        if (arg.getLocation() == Location.CONTEXT) {
+          continue;
+        }
         sink.definedTerm();
         boldText(sink, arg.getLocation().toString().toLowerCase() + " parameter: ");
         sink.text(arg.getName());
@@ -366,6 +372,10 @@ public class DocgeneratorMojo extends AbstractMavenReport {
         if (arg.getDoc() != null) {
           sink.definition();
           sink.text(arg.getDoc());
+          sink.definition_();
+        } else if (paramDocs.containsKey(arg.getName())) {
+          sink.definition();
+          sink.text(paramDocs.get(arg.getName()));
           sink.definition_();
         }
       }
@@ -394,6 +404,43 @@ public class DocgeneratorMojo extends AbstractMavenReport {
     if (method.getExampleResponse() != null || method.getExampleArgs() != null) {
       documentExampleRequestResponse(sink, method);
     }
+  }
+
+  private Map<String, String> getParamDocs(final String javadoc) {
+    final ImmutableMap.Builder<String, String> paramDocs = ImmutableMap.builder();
+
+    StringBuilder doc = new StringBuilder();
+    String argname = null;
+
+    for (final String line : Splitter.on('\n').split(javadoc)) {
+      if (line.startsWith(" @param")) {
+        // flush existing
+        if (argname != null) {
+          paramDocs.put(argname, doc.toString());
+          doc = new StringBuilder();
+          argname = null;
+        }
+
+        final List<String> paramLineBits = Splitter.on(" ").limit(3).splitToList(line.substring(1));
+        argname = paramLineBits.get(1);
+        doc.append(paramLineBits.get(2));
+      } else if (argname != null && line.startsWith("  ")) {
+        doc.append(line.substring(1));
+      } else {
+        // flush existing
+        if (argname != null) {
+          paramDocs.put(argname, doc.toString());
+          doc = new StringBuilder();
+          argname = null;
+        }
+      }
+    }
+    // flush existing
+    if (argname != null) {
+      paramDocs.put(argname, doc.toString());
+      doc = new StringBuilder();
+    }
+    return paramDocs.build();
   }
 
   private void documentExampleRequestResponse(final Sink sink, final ResourceMethod method) {
@@ -612,23 +659,36 @@ public class DocgeneratorMojo extends AbstractMavenReport {
     heading2(sink, "Table Of Contents");
   }
 
-  private void outputJavadoc(Sink sink, final String javadoc) {
+  private void outputJavadoc(final Sink sink, final String javadoc) {
     sink.paragraph();
     processJavadoc(sink, javadoc);
     sink.paragraph_();
   }
 
   private void processJavadoc(final Sink sink, final String javadoc) {
-
     if (javadoc == null) {
       return;
     }
 
     final String linked = linkifyJavadoc(javadoc);
     final String paragraphed = paragraphifyJavadoc(linked);
+    final String truncated = truncateJavadoc(paragraphed);
 
+    sink.rawText(truncated);
+  }
 
-    sink.rawText(paragraphed);
+  private String truncateJavadoc(final String paragraphed) {
+    final List<String> lines = Splitter.on("\n").splitToList(paragraphed);
+    for (int i = 0; i < lines.size(); i++) {
+      final String line = lines.get(i);
+      if (line.startsWith(" @return") || line.startsWith(" @param")
+          || line.startsWith(" @throws")) {
+        log.info("found terminator line in javadoc --> " + line);
+        return Joiner.on("\n").join(lines.subList(0, i));
+      }
+    }
+    log.info("did not find terminator line in javadoc " + paragraphed);
+    return paragraphed;
   }
 
   private String paragraphifyJavadoc(final String javadoc) {

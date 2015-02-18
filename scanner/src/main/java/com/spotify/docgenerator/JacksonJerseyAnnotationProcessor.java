@@ -158,11 +158,6 @@ public class JacksonJerseyAnnotationProcessor extends AbstractProcessor {
   private List<ResourceArgument> computeMethodArguments(final ExecutableElement ee) {
     final List<ResourceArgument> arguments = Lists.newArrayList();
     for (final VariableElement ve : ee.getParameters()) {
-      // don't include context params in rest call stuff
-      final Context contextAnnotation = ve.getAnnotation(Context.class);
-      if (contextAnnotation != null) {
-        continue;
-      }
       final PathParam pathAnnotation = ve.getAnnotation(PathParam.class);
       final String argName;
       if (pathAnnotation != null) {
@@ -182,6 +177,8 @@ public class JacksonJerseyAnnotationProcessor extends AbstractProcessor {
         location = Location.PATH;
       } else if (ve.getAnnotation(QueryParam.class) != null) {
         location = Location.QUERY;
+      } else if (ve.getAnnotation(Context.class) != null) {
+        location = Location.CONTEXT;
       } else {
         location = Location.BODY;
       }
