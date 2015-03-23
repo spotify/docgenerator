@@ -114,13 +114,55 @@ this project originated), it may look something like this:
   </reporting>
 ```
   
-Note, if your documentation requires, as the example above, other submodules of your reactor 
-project, make sure to list them as dependencies in the `<dependencies>` section, so they will
-be built before the documentation gets built.
+Note, if your documentation requires, as the example above, other
+submodules of your reactor project, make sure to list them as
+dependencies in the `<dependencies>` section, so they will be built
+before the documentation gets built.
  
-The `<jarFiles>` bits are primarily for the case of `enum` types.  Basically, it's for types
-referenced by one of the Jackson-serialized classes, that themselves aren't Jackson-serialized.
-  
+If you have enumerated types that you want documented, you'll need to include
+the dependency which includes them.  See below.
+
+If the return content type of your method is `application/json` and
+you provided an example json response, the docgenerator will attempt
+to deserialize it and let you know if it fails.  In order to do this,
+the dependency which contains the thing to be deserialized needs to be
+added.  See below.  If you need to turn validation off, you can set the
+`skipValidation` property to `true`.
+
+To include dependencies for use by the docgenerator, you have two
+choices.  The first is to use the `<jarFiles>` notation as above.
+This shouldn't be your first choice, but can work if others fail.
+Your first choice is to add the dependency as you would any other
+maven dependency as a dependency of the `maven-site-plugin`.  For
+example, if you needed to include a class from the `javax.ws.rs-api`
+version 2.0.1, you'd do this:
+
+```xml
+  <build>
+    <plugins>
+      <plugin>
+	<groupId>org.apache.maven.plugins</groupId>
+	<artifactId>maven-site-plugin</artifactId>
+ 	<dependencies>
+	  <dependency>
+	    <groupId>javax.ws.rs</groupId>
+	    <artifactId>javax.ws.rs-api</artifactId>
+	    <version>2.0.1</version>
+	  </dependency>
+	</dependencies>
+      </plugin>
+    </plugins>
+  </build>
+```
+
+N.B. For some reason, using the normal maven dependency thing doesn't quite
+work and as a result, may get errors from Jackson about "cannot instantiate
+JSON object (need to add/enable type information?)".  In these cases,
+assuming the class in question is properly configured and has appropriate
+`@JsonProperty` annotations, try using the `jarFile` configuration property
+instead to see if it goes away.  If you can explain to me why this happens,
+pull requests definitely welcomed.
+
 ## Building the Docs
 To build the docs, it should be a simple matter of running:
 

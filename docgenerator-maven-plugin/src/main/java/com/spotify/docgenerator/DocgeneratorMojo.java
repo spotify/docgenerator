@@ -58,6 +58,7 @@ import com.fasterxml.jackson.databind.ObjectReader;
 import com.fasterxml.jackson.databind.ObjectWriter;
 import com.google.common.base.Joiner;
 import com.google.common.base.Splitter;
+import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
@@ -119,6 +120,9 @@ public class DocgeneratorMojo extends AbstractMavenReport {
 
   @Parameter(property = "exampleHostPort")
   private String exampleHostPort;
+
+  @Parameter(property = "skipValidation")
+  private Boolean skipValidation = false;
 
   /**
    * Location of the file.
@@ -328,6 +332,7 @@ public class DocgeneratorMojo extends AbstractMavenReport {
     tableOfContentsHeader(sink);
     sink.list();
     for (final ResourceMethod method : allMethods) {
+      validateExamples(method);
       sink.listItem();
       sink.link("#" + endpointAnchor(method.getMethod(), endpointPrefix + method.getPath()));
       sink.text(method.getMethod().toUpperCase() + " " + endpointPrefix + method.getPath());
@@ -339,6 +344,58 @@ public class DocgeneratorMojo extends AbstractMavenReport {
     for (final ResourceMethod method : allMethods) {
       handleRestEndpoint(sink, method);
     }
+  }
+
+  private void validateRequest(final ResourceMethod method) {
+    if (method.getArguments() == null) {
+      return;
+    }
+    for (final ResourceArgument argument : method.getArguments()) {
+      if (argument.getLocation() != Location.BODY) {
+        continue;
+      }
+      checkClassAndExample(method.getConsumesContentType(), method.getExampleRequest(),
+          argument.getType().getName(), method, "request");
+    }
+  }
+
+  private void validateResponse(final ResourceMethod method) {
+    checkClassAndExample(method.getReturnContentType(), method.getExampleResponse(),
+        method.getReturnType().getName(), method, "response");
+  }
+
+  private void checkClassAndExample(final String contentType,
+      final String example, final String type, final ResourceMethod method, final String which) {
+    if (Strings.isNullOrEmpty(example)) {
+      return;
+    }
+    if (!"application/json".equals(contentType)) {
+      return;
+    }
+    final String debugMethodName = method.getMethod() + " " + method.getPath();
+    log.info("checking example " + which + " for " + debugMethodName);
+
+    final Class<?> clazz;
+    try {
+      clazz = getClassForName(type);
+    } catch (final ClassNotFoundException | MalformedURLException e) {
+      throw new RuntimeException("error getting class " + type, e);
+    }
+
+    try {
+      new ObjectMapper().readValue(example, clazz);
+    } catch (final IOException e) {
+      throw new RuntimeException("in " + debugMethodName + " cannot load type " + clazz
+          + " from example [" + example + "]", e);
+    }
+  }
+
+  private void validateExamples(final ResourceMethod method) {
+    if (skipValidation) {
+      return;
+    }
+    validateResponse(method);
+    validateRequest(method);
   }
 
   private void handleRestEndpoint(final Sink sink, final ResourceMethod method) {
@@ -737,14 +794,6 @@ public class DocgeneratorMojo extends AbstractMavenReport {
     sink.section3_();
   }
 
-  private void heading4(Sink sink, final String string) {
-    sink.section4();
-    sink.sectionTitle4();
-    sink.text(string);
-    sink.sectionTitle4_();
-    sink.section4_();
-  }
-
   @Override
   protected String getOutputDirectory() {
     return outputDirectory.getAbsolutePath();
@@ -767,7 +816,6 @@ public class DocgeneratorMojo extends AbstractMavenReport {
   }
 
   private URLClassLoader getPluginClassLoader() throws MalformedURLException {
-    log.debug("Plugin Classloader = " + pluginClassLoader);
     if (pluginClassLoader != null) {
       return pluginClassLoader;
     }
@@ -778,9 +826,9 @@ public class DocgeneratorMojo extends AbstractMavenReport {
       jarUrls.add(new URL("file://" + jarName));
       log.warn("Adding " + jarName + " to resolution path");
     }
-    final URLClassLoader loader = new URLClassLoader(jarUrls.toArray(new URL[jarUrls.size()]));
+    final URLClassLoader loader = new URLClassLoader(jarUrls.toArray(new URL[jarUrls.size()]),
+        this.getClass().getClassLoader());
     pluginClassLoader = loader;
     return loader;
   }
-
 }
