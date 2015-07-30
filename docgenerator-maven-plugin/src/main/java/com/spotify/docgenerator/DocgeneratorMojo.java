@@ -193,9 +193,9 @@ public class DocgeneratorMojo extends AbstractMavenReport {
 
     final Map<String, TransferClass> allClasses = loadClasses(mapper);
     knownClasses.addAll(allClasses.keySet());
-    for (TransferClass transferClass : allClasses.values()) {
+    for (final TransferClass transferClass : allClasses.values()) {
       if (transferClass.getMembers() != null) {
-        for (TransferMember member : transferClass.getMembers()) {
+        for (final TransferMember member : transferClass.getMembers()) {
           spiderKnownTypes(member.getType(), referencedClasses);
         }
       }
@@ -203,6 +203,7 @@ public class DocgeneratorMojo extends AbstractMavenReport {
     tableOfContentsHeader(sink);
     sink.list();
     final Set<String> everyClasses = Sets.newHashSet(knownClasses);
+    log.info("number of classes " + everyClasses.size());
     everyClasses.addAll(referencedClasses);
     final List<String> everyClassesList = Lists.newArrayList(everyClasses);
     Collections.sort(everyClassesList);
@@ -285,7 +286,7 @@ public class DocgeneratorMojo extends AbstractMavenReport {
     final Map<String, TransferClass> allClasses = Maps.newHashMap();
 
     for (final String path : jsonClassesFiles) {
-      log.debug("looking at class file: " + path);
+      log.debug("looking at json classes file: " + path);
       try (FileInputStream ist = new FileInputStream(path)) {
         final Map<String, TransferClass> v = readTransferClasses(mapper, ist);
         allClasses.putAll(v);
@@ -513,7 +514,7 @@ public class DocgeneratorMojo extends AbstractMavenReport {
       sink.rawText("    -E certinfo --cacert cacerts_file \\\n");
     }
     if (method.getConsumesContentType() != null) {
-      sink.rawText("    -H \"" + method.getConsumesContentType() + "\" \\\n");
+      sink.rawText("    -H \"Content-Type: " + method.getConsumesContentType() + "\" \\\n");
     }
     if (!"GET".equals(method.getMethod()) && method.getExampleRequest() != null) {
       sink.rawText("    -d'");

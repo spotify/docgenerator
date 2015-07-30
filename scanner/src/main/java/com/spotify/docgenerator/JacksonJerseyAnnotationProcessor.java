@@ -82,7 +82,7 @@ import static com.fasterxml.jackson.databind.SerializationFeature.WRITE_DATES_AS
     "com.spotify.helios.master.http.PATCH",
     "com.spotify.docgenerator.DocEnum"
     })
-@SupportedSourceVersion(SourceVersion.RELEASE_7)
+@SupportedSourceVersion(SourceVersion.RELEASE_8)
 @SupportedOptions({ "debug", "verify" })
 @AutoService(Processor.class)
 public class JacksonJerseyAnnotationProcessor extends AbstractProcessor {
