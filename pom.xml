@@ -72,7 +72,7 @@
 
   <modules>
     <module>common</module>
-    <module>scanner</module>
+    <!--module>scanner</module-->
     <module>docgenerator-maven-plugin</module>
     <module>testproject</module>
   </modules>
