@@ -5,7 +5,7 @@ Generates a maven report named rest.html that contains the `javax.ws.rs` annotat
 methods and Jackson `@JsonProperty` annotated objects, and a few other things.
 
 
-#To Use
+# To Use
 ## Maven Configuration
 There are two parts to the documentation generator:
   1. The annotation processor that scans the code for annotations and drops files based upon what it
@@ -88,13 +88,13 @@ mvn package site
  
 After it's done, the docs should be in `target/site/rest.html`.
   
-#TODO
+# TODO
 * The Javadoc processing is pretty pathetic
 * Someone who has visual design skills could provide very useful improvements.
 * maybe: Alternatively to doing the maven report plugin thing, a separate tool could be written that
   processed the output files and produced pretty docs.
   
-#Under The Hood
+# Under The Hood
 The annotation processor will cause two files to be dropped in the `target/classes` directory when
 the package is built.  They are named `JSONClasses` which will be serialized form of 
 `Map<String, TransferClass>` which describes the Jackson annotated classes it found, and the
