@@ -1,6 +1,9 @@
 Docgenerator
 ============
 
+**Note:** This project has been discontinued. 
+
+
 Generates a maven report named rest.html that contains the `javax.ws.rs` annotated HTTP endpoint
 methods and Jackson `@JsonProperty` annotated objects, and a few other things.
 
